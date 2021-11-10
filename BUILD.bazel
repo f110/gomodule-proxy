@@ -7,9 +7,19 @@ gazelle(name = "gazelle")
 
 go_library(
     name = "gomodule-proxy_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "command.go",
+        "main.go",
+        "server.go",
+    ],
     importpath = "go.f110.dev/gomodule-proxy",
     visibility = ["//visibility:private"],
+    deps = [
+        "//vendor/github.com/julienschmidt/httprouter",
+        "//vendor/github.com/spf13/cobra",
+        "//vendor/github.com/spf13/pflag",
+        "//vendor/golang.org/x/xerrors",
+    ],
 )
 
 go_binary(
