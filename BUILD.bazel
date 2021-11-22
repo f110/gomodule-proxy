@@ -27,7 +27,6 @@ go_library(
         "//vendor/github.com/spf13/pflag",
         "//vendor/golang.org/x/mod/modfile",
         "//vendor/golang.org/x/mod/semver",
-        "//vendor/golang.org/x/net/html",
         "//vendor/golang.org/x/oauth2",
         "//vendor/golang.org/x/tools/go/vcs",
         "//vendor/golang.org/x/xerrors",

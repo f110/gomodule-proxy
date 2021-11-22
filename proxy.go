@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/go-github/v40/github"
-	"golang.org/x/net/html"
 	"golang.org/x/xerrors"
 )
 
@@ -118,74 +115,6 @@ func (m *ModuleProxy) GetGoMod(_ context.Context, module, version string) (strin
 	}
 
 	return string(goMod), nil
-}
-
-func (m *ModuleProxy) getGoImport(ctx context.Context, module string) (vcs string, repoRoot string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s?go-get=1", module), nil)
-	if err != nil {
-		return "", "", xerrors.Errorf(": %w", err)
-	}
-	res, err := m.httpClient.Do(req)
-	if err != nil {
-		return "", "", xerrors.Errorf(": %w", err)
-	}
-	defer res.Body.Close()
-
-	switch res.StatusCode {
-	case http.StatusOK:
-	default:
-		return "", "", xerrors.Errorf("got %d expect 200", res.StatusCode)
-	}
-
-	doc, err := html.Parse(res.Body)
-	if err != nil {
-		return "", "", xerrors.Errorf(": %w", err)
-	}
-	var f func(node *html.Node)
-	f = func(node *html.Node) {
-		if node.Type == html.ElementNode && node.Data == "meta" {
-			found := false
-			var content string
-			for _, v := range node.Attr {
-				if v.Key == "name" && v.Val == "go-import" {
-					found = true
-					continue
-				}
-				if v.Key == "content" {
-					content = v.Val
-				}
-			}
-			if found {
-				prefix, v, root := m.findGoImport(content)
-				_ = prefix
-				vcs = v
-				repoRoot = root
-				if vcs != "" && repoRoot != "" {
-					// Stop walking
-					return
-				}
-			}
-		}
-		for c := node.FirstChild; c != nil; c = c.NextSibling {
-			f(c)
-		}
-	}
-	f(doc)
-
-	if vcs == "" || repoRoot == "" {
-		return "", "", xerrors.Errorf("not found go-import")
-	}
-
-	return
-}
-
-func (m *ModuleProxy) findGoImport(content string) (prefix string, vcs string, root string) {
-	// <meta name="go-import" content="github.com/f110/mono git https://github.com/f110/mono.git">
-	if fields := strings.Fields(content); len(fields) == 3 && fields[1] != "mod" {
-		return fields[0], fields[1], fields[2]
-	}
-
-	return
 }
 
 type httpTransport struct{}
