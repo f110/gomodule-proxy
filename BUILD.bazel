@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
 gazelle(name = "gazelle")
@@ -9,16 +9,26 @@ go_library(
     name = "gomodule-proxy_lib",
     srcs = [
         "command.go",
+        "config.go",
+        "fetcher.go",
         "main.go",
+        "proxy.go",
         "server.go",
     ],
     importpath = "go.f110.dev/gomodule-proxy",
     visibility = ["//visibility:private"],
     deps = [
-        "//vendor/github.com/julienschmidt/httprouter",
+        "//vendor/github.com/google/go-github/v40/github",
+        "//vendor/github.com/gorilla/mux",
         "//vendor/github.com/spf13/cobra",
         "//vendor/github.com/spf13/pflag",
+        "//vendor/golang.org/x/mod/modfile",
+        "//vendor/golang.org/x/mod/semver",
+        "//vendor/golang.org/x/net/html",
+        "//vendor/golang.org/x/oauth2",
+        "//vendor/golang.org/x/tools/go/vcs",
         "//vendor/golang.org/x/xerrors",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
     ],
 )
 
@@ -26,4 +36,17 @@ go_binary(
     name = "gomodule-proxy",
     embed = [":gomodule-proxy_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "gomodule-proxy_test",
+    srcs = ["fetcher_test.go"],
+    embed = [":gomodule-proxy_lib"],
+    deps = [
+        "//vendor/github.com/go-git/go-git/v5:go-git",
+        "//vendor/github.com/go-git/go-git/v5/plumbing/object",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/tools/go/vcs",
+    ],
 )
