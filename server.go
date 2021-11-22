@@ -120,6 +120,17 @@ func (s *ProxyServer) mod(w http.ResponseWriter, req *http.Request, module, vers
 }
 
 func (s *ProxyServer) zip(w http.ResponseWriter, req *http.Request, module, version string) {
+	archiveReader, err := s.proxy.GetZip(req.Context(), module, version)
+	if err != nil {
+		log.Printf("Failed to create zip: %+v", err)
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = io.Copy(w, archiveReader)
+	if err != nil {
+		log.Printf("Failed to write an archive to ResponseWriter: %v", err)
+	}
 }
 
 func middlewareAccessLog(next http.Handler) http.Handler {
