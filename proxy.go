@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -96,24 +95,29 @@ func (m *ModuleProxy) GetInfo(_ context.Context, module, version string) (Info, 
 	return Info{}, xerrors.Errorf("%s is not found in %s", version, module)
 }
 
-func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (string, error) {
-	vcs, repoRoot, err := m.getGoImport(ctx, module)
+func (m *ModuleProxy) GetGoMod(_ context.Context, module, version string) (string, error) {
+	modRoot, err := m.fetcher.Fetch(module)
 	if err != nil {
 		return "", xerrors.Errorf(": %w", err)
 	}
-	if !(vcs == "git" && strings.Contains(repoRoot, "github.com")) {
-		return "", xerrors.Errorf("the module is not hosted by github.com doesn't supported")
-	}
-	u, err := url.Parse(repoRoot)
-	if err != nil {
-		return "", xerrors.Errorf(": %w", err)
-	}
-	s := strings.Split(u.Path, "/")
-	owner, repo := s[1], s[2]
-	_ = owner
-	_ = repo
 
-	return "", nil
+	var mod *Module
+	for _, v := range modRoot.Modules {
+		if v.Path == module {
+			mod = v
+			break
+		}
+	}
+	if mod == nil {
+		return "", xerrors.Errorf("%s is not found", module)
+	}
+
+	goMod, err := mod.ModuleFile(version)
+	if err != nil {
+		return "", xerrors.Errorf(": %w", err)
+	}
+
+	return string(goMod), nil
 }
 
 func (m *ModuleProxy) getGoImport(ctx context.Context, module string) (vcs string, repoRoot string, err error) {
