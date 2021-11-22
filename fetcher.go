@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -54,6 +55,9 @@ func (f *ModuleFetcher) Fetch(importPath string) (*ModuleRoot, error) {
 	}
 
 	dir := filepath.Join(f.baseDir, repoRoot.Root)
+	if err := f.setTagSyncDefaultCommand(repoRoot, dir); err != nil {
+		return nil, xerrors.Errorf(": %w", err)
+	}
 	if err := f.updateOrCreate(repoRoot, dir); err != nil {
 		return nil, xerrors.Errorf(": %w", err)
 	}
@@ -75,6 +79,40 @@ func (f *ModuleFetcher) Fetch(importPath string) (*ModuleRoot, error) {
 	}, nil
 }
 
+func (f *ModuleFetcher) setTagSyncDefaultCommand(repoRoot *vcs.RepoRoot, dir string) error {
+	if repoRoot.VCS.Cmd != "git" {
+		return nil
+	}
+
+	repo, err := git.PlainOpen(dir)
+	if err != nil {
+		return xerrors.Errorf(": %w", err)
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		return xerrors.Errorf(": %w", err)
+	}
+	refs, err := remote.List(&git.ListOptions{})
+	if err != nil {
+		return xerrors.Errorf(": %w", err)
+	}
+	var headRef *plumbing.Reference
+	for _, ref := range refs {
+		if strings.HasPrefix(ref.Name().String(), "refs/pull") {
+			continue
+		}
+		if ref.Name().String() == "HEAD" {
+			headRef = ref
+			break
+		}
+	}
+	if headRef.Target().Short() != "master" {
+		repoRoot.VCS.TagSyncDefault = fmt.Sprintf("checkout %s", headRef.Target().Short())
+	}
+
+	return nil
+}
+
 func (f *ModuleFetcher) updateOrCreate(repoRoot *vcs.RepoRoot, dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -84,6 +122,9 @@ func (f *ModuleFetcher) updateOrCreate(repoRoot *vcs.RepoRoot, dir string) error
 			return xerrors.Errorf(": %w", err)
 		}
 	} else {
+		if err := repoRoot.VCS.TagSync(dir, ""); err != nil {
+			return xerrors.Errorf(": %w", err)
+		}
 		if err = repoRoot.VCS.Download(dir); err != nil {
 			return xerrors.Errorf(": %w", err)
 		}
