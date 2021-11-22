@@ -159,9 +159,9 @@ func (m *ModuleRoot) findVersions() error {
 			if err == nil {
 				switch v := obj.(type) {
 				case *object.Tag:
-					modVer.Time = v.Tagger.When
+					modVer.Time = v.Tagger.When.In(time.UTC)
 				case *object.Commit:
-					modVer.Time = v.Author.When
+					modVer.Time = v.Author.When.In(time.UTC)
 				}
 			} else {
 				log.Printf("Failed to get tag object %s %s: %v", ver, ref.Hash().String(), err)
