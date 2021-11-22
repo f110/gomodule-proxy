@@ -2,10 +2,15 @@ package main
 
 import (
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 	"golang.org/x/tools/go/vcs"
@@ -22,11 +27,16 @@ type ModuleRoot struct {
 
 type Module struct {
 	Path     string
-	Versions []string
+	Versions []*ModuleVersion
 
 	modFilePath string
 	dir         string
 	repoRoot    *vcs.RepoRoot
+}
+
+type ModuleVersion struct {
+	Version string
+	Time    time.Time
 }
 
 type ModuleFetcher struct {
@@ -132,9 +142,37 @@ func (m *ModuleRoot) findVersions() error {
 	if err != nil {
 		return xerrors.Errorf(": %w", err)
 	}
-	var allVer []string
+
+	repo, err := git.PlainOpen(m.dir)
+	if err != nil {
+		return xerrors.Errorf(": %w", err)
+	}
+	var allVer []*ModuleVersion
 	for _, ver := range versions {
-		allVer = append(allVer, ver)
+		if !semver.IsValid(ver) {
+			continue
+		}
+		modVer := &ModuleVersion{Version: ver}
+		ref, err := repo.Reference(plumbing.NewTagReferenceName(ver), true)
+		if err == nil {
+			obj, err := repo.Object(plumbing.AnyObject, ref.Hash())
+			if err == nil {
+				switch v := obj.(type) {
+				case *object.Tag:
+					modVer.Time = v.Tagger.When
+				case *object.Commit:
+					modVer.Time = v.Author.When
+				}
+			} else {
+				log.Printf("Failed to get tag object %s %s: %v", ver, ref.Hash().String(), err)
+			}
+		} else {
+			log.Printf("Failed ref %s: %v", ver, err)
+		}
+		if modVer.Time.IsZero() {
+			log.Printf("Failed to get time %s", ver)
+		}
+		allVer = append(allVer, modVer)
 	}
 
 	for _, v := range m.Modules {
@@ -147,7 +185,7 @@ func (m *ModuleRoot) findVersions() error {
 func (m *Module) ModuleFile(version string) ([]byte, error) {
 	isTag := false
 	for _, v := range m.Versions {
-		if version == v {
+		if version == v.Version {
 			isTag = true
 			break
 		}
@@ -166,21 +204,21 @@ func (m *Module) ModuleFile(version string) ([]byte, error) {
 	return nil, xerrors.New("specified commit is not supported")
 }
 
-func (m *Module) setVersions(vers []string) {
+func (m *Module) setVersions(vers []*ModuleVersion) {
 	relPath := strings.TrimPrefix(m.Path, m.repoRoot.Root)
 	if len(relPath) > 0 {
 		relPath = relPath[1:]
 	}
 
-	var modVer []string
+	var modVer []*ModuleVersion
 	for _, ver := range vers {
-		if len(relPath) > 0 && strings.HasPrefix(ver, relPath) {
+		if len(relPath) > 0 && strings.HasPrefix(ver.Version, relPath) {
 			modVer = append(modVer, ver)
 		}
 	}
 	if len(modVer) == 0 {
 		for _, ver := range vers {
-			if !semver.IsValid(ver) {
+			if !semver.IsValid(ver.Version) {
 				continue
 			}
 			modVer = append(modVer, ver)

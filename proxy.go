@@ -49,8 +49,8 @@ func (m *ModuleProxy) IsUpstream(module string) bool {
 }
 
 type Info struct {
-	Version string    `json:"version"`
-	Time    time.Time `json:"time"`
+	Version string
+	Time    time.Time
 }
 
 func (m *ModuleProxy) Versions(_ context.Context, module string) ([]string, error) {
@@ -60,37 +60,40 @@ func (m *ModuleProxy) Versions(_ context.Context, module string) ([]string, erro
 	}
 	for _, mod := range modRoot.Modules {
 		if mod.Path == module {
-			return mod.Versions, nil
+			var versions []string
+			for _, v := range mod.Versions {
+				versions = append(versions, v.Version)
+			}
+			return versions, nil
 		}
 	}
 
 	return nil, xerrors.Errorf("%s is not found", module)
 }
 
-func (m *ModuleProxy) GetInfo(ctx context.Context, module, version string) (Info, error) {
-	vcs, repoRoot, err := m.getGoImport(ctx, module)
-	if err != nil {
-		return Info{}, xerrors.Errorf(": %w", err)
-	}
-	if !(vcs == "git" && strings.Contains(repoRoot, "github.com")) {
-		return Info{}, xerrors.Errorf("the module is not hosted by github.com doesn't supported")
-	}
-	u, err := url.Parse(repoRoot)
-	if err != nil {
-		return Info{}, xerrors.Errorf(": %w", err)
-	}
-	s := strings.Split(u.Path, "/")
-	owner, repo := s[1], s[2]
-
-	commit, _, err := m.githubClient.Repositories.GetCommit(context.Background(), owner, repo, version, &github.ListOptions{})
+func (m *ModuleProxy) GetInfo(_ context.Context, module, version string) (Info, error) {
+	modRoot, err := m.fetcher.Fetch(module)
 	if err != nil {
 		return Info{}, xerrors.Errorf(": %w", err)
 	}
 
-	return Info{
-		Version: fmt.Sprintf("v0.0.0-%s-%s", commit.Commit.Committer.GetDate().Format("20060102150405"), commit.GetSHA()[0:12]),
-		Time:    commit.Commit.Committer.GetDate(),
-	}, nil
+	var mod *Module
+	for _, v := range modRoot.Modules {
+		if v.Path == module {
+			mod = v
+			break
+		}
+	}
+	if mod == nil {
+		return Info{}, xerrors.Errorf("%s is not found", module)
+	}
+	for _, v := range mod.Versions {
+		if v.Version == version {
+			return Info{Version: v.Version, Time: v.Time}, nil
+		}
+	}
+
+	return Info{}, xerrors.Errorf("%s is not found in %s", version, module)
 }
 
 func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (string, error) {
