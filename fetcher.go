@@ -76,10 +76,7 @@ func (f *ModuleFetcher) Fetch(importPath string) (*ModuleRoot, error) {
 		return nil, xerrors.Errorf(": %w", err)
 	}
 
-	return &ModuleRoot{
-		RootPath: repoRoot.Root,
-		Modules:  modules,
-	}, nil
+	return moduleRoot, nil
 }
 
 func (f *ModuleFetcher) setTagSyncDefaultCommand(repoRoot *vcs.RepoRoot, dir string) error {
@@ -142,6 +139,104 @@ func NewModuleRoot(repoRoot *vcs.RepoRoot, dir string) *ModuleRoot {
 		dir:      dir,
 		repoRoot: repoRoot,
 	}
+}
+
+func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
+	var mod *Module
+	for _, v := range m.Modules {
+		if v.Path == module {
+			mod = v
+			break
+		}
+	}
+	isTag := false
+	for _, v := range mod.Versions {
+		if version == v.Version {
+			isTag = true
+			break
+		}
+	}
+	excludeDirs := make(map[string]struct{})
+	for _, v := range m.Modules {
+		if v == mod {
+			continue
+		}
+		excludeDirs[filepath.Dir(v.modFilePath)] = struct{}{}
+	}
+
+	if isTag {
+		if err := m.repoRoot.VCS.TagSync(m.dir, version); err != nil {
+			return nil, xerrors.Errorf(": %w", err)
+		}
+		buf := new(bytes.Buffer)
+		w := zip.NewWriter(buf)
+		relPath := filepath.Join(m.dir, strings.TrimPrefix(mod.Path, m.repoRoot.Root))
+		modDir := mod.Path + "@" + version
+		err := filepath.Walk(relPath, func(path string, info fs.FileInfo, err error) error {
+			if err != nil {
+				return xerrors.Errorf(": %w", err)
+			}
+			if info.IsDir() {
+				return nil
+			}
+			for k := range excludeDirs {
+				if strings.HasPrefix(path, k) {
+					return nil
+				}
+			}
+
+			p := strings.TrimPrefix(path, relPath)
+			p = p[1:]
+			p = filepath.Join(modDir, p)
+			f, err := w.Create(p)
+			if err != nil {
+				return xerrors.Errorf(": %w", err)
+			}
+			fBuf, err := os.ReadFile(path)
+			if err != nil {
+				return xerrors.Errorf(": %w", err)
+			}
+			_, err = f.Write(fBuf)
+			if err != nil {
+				return xerrors.Errorf(": %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, xerrors.Errorf(": %w", err)
+		}
+
+		// Find and pack LICENSE file
+		d := relPath
+		for {
+			if _, err := os.Stat(filepath.Join(d, "LICENSE")); os.IsNotExist(err) {
+				if d == m.dir {
+					break
+				}
+				d = filepath.Dir(d)
+				continue
+			}
+
+			f, err := w.Create(filepath.Join(modDir, "LICENSE"))
+			if err != nil {
+				return nil, xerrors.Errorf(": %w", err)
+			}
+			fBuf, err := os.ReadFile(filepath.Join(d, "LICENSE"))
+			if err != nil {
+				return nil, xerrors.Errorf(": %w", err)
+			}
+			_, err = f.Write(fBuf)
+			if err != nil {
+				return nil, xerrors.Errorf(": %w", err)
+			}
+			break
+		}
+
+		w.Close()
+		return buf, nil
+	}
+
+	return nil, xerrors.New("specified commit is not support")
 }
 
 func (m *ModuleRoot) findModules() ([]*Module, error) {
@@ -246,84 +341,6 @@ func (m *Module) ModuleFile(version string) ([]byte, error) {
 	}
 
 	return nil, xerrors.New("specified commit is not supported")
-}
-
-func (m *Module) Archive(version string) (io.Reader, error) {
-	isTag := false
-	for _, v := range m.Versions {
-		if version == v.Version {
-			isTag = true
-			break
-		}
-	}
-	if isTag {
-		if err := m.repoRoot.VCS.TagSync(m.dir, version); err != nil {
-			return nil, xerrors.Errorf(": %w", err)
-		}
-		buf := new(bytes.Buffer)
-		w := zip.NewWriter(buf)
-		relPath := filepath.Join(m.dir, strings.TrimPrefix(m.Path, m.repoRoot.Root))
-		modDir := m.Path + "@" + version
-		err := filepath.Walk(relPath, func(path string, info fs.FileInfo, err error) error {
-			if err != nil {
-				return xerrors.Errorf(": %w", err)
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			p := strings.TrimPrefix(path, relPath)
-			p = p[1:]
-			p = filepath.Join(modDir, p)
-			f, err := w.Create(p)
-			if err != nil {
-				return xerrors.Errorf(": %w", err)
-			}
-			fBuf, err := os.ReadFile(path)
-			if err != nil {
-				return xerrors.Errorf(": %w", err)
-			}
-			_, err = f.Write(fBuf)
-			if err != nil {
-				return xerrors.Errorf(": %w", err)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, xerrors.Errorf(": %w", err)
-		}
-
-		// Find and pack LICENSE file
-		d := relPath
-		for {
-			if _, err := os.Stat(filepath.Join(d, "LICENSE")); os.IsNotExist(err) {
-				if d == m.dir {
-					break
-				}
-				d = filepath.Dir(d)
-				continue
-			}
-
-			f, err := w.Create(filepath.Join(modDir, "LICENSE"))
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
-			}
-			fBuf, err := os.ReadFile(filepath.Join(d, "LICENSE"))
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
-			}
-			_, err = f.Write(fBuf)
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
-			}
-			break
-		}
-
-		w.Close()
-		return buf, nil
-	}
-
-	return nil, xerrors.New("specified commit is not support")
 }
 
 func (m *Module) setVersions(vers []*ModuleVersion) {

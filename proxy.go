@@ -124,18 +124,7 @@ func (m *ModuleProxy) GetZip(_ context.Context, module, version string) (io.Read
 		return nil, xerrors.Errorf(": %w", err)
 	}
 
-	var mod *Module
-	for _, v := range modRoot.Modules {
-		if v.Path == module {
-			mod = v
-			break
-		}
-	}
-	if mod == nil {
-		return nil, xerrors.Errorf("%s is not found", module)
-	}
-
-	r, err := mod.Archive(version)
+	r, err := modRoot.Archive(module, version)
 	if err != nil {
 		return nil, xerrors.Errorf(": %w", err)
 	}
