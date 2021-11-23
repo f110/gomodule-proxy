@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -367,5 +368,12 @@ func (m *Module) setVersions(vers []*ModuleVersion) {
 			modVer = append(modVer, ver)
 		}
 	}
+	sort.Slice(modVer, func(i, j int) bool {
+		cmp := semver.Compare(modVer[i].Version, modVer[j].Version)
+		if cmp != 0 {
+			return cmp < 0
+		}
+		return modVer[i].Version < modVer[j].Version
+	})
 	m.Versions = modVer
 }

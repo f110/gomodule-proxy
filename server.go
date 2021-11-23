@@ -39,6 +39,7 @@ func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, debug bo
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@v/{version}.info").HandlerFunc(s.handle(s.info))
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@v/{version}.mod").HandlerFunc(s.handle(s.mod))
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@v/{version}.zip").HandlerFunc(s.handle(s.zip))
+	s.r.Methods(http.MethodGet).Path("/{module:.+}/@latest").HandlerFunc(s.handle(s.latest))
 	s.r.Use(middlewareAccessLog)
 	if debug {
 		s.r.Use(middlewareDebugInfo)
@@ -130,6 +131,19 @@ func (s *ProxyServer) zip(w http.ResponseWriter, req *http.Request, module, vers
 	_, err = io.Copy(w, archiveReader)
 	if err != nil {
 		log.Printf("Failed to write an archive to ResponseWriter: %v", err)
+	}
+}
+
+func (s *ProxyServer) latest(w http.ResponseWriter, req *http.Request, module, _ string) {
+	info, err := s.proxy.GetLatestVersion(req.Context(), module)
+	if err != nil {
+		log.Printf("Failed to get latest module version: %+v", err)
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		log.Printf("Failed to encode to json: %v", err)
+		return
 	}
 }
 

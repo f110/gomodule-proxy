@@ -93,6 +93,27 @@ func (m *ModuleProxy) GetInfo(_ context.Context, module, version string) (Info, 
 	return Info{}, xerrors.Errorf("%s is not found in %s", version, module)
 }
 
+func (m *ModuleProxy) GetLatestVersion(_ context.Context, module string) (Info, error) {
+	modRoot, err := m.fetcher.Fetch(module)
+	if err != nil {
+		return Info{}, xerrors.Errorf(": %w", err)
+	}
+
+	var mod *Module
+	for _, v := range modRoot.Modules {
+		if v.Path == module {
+			mod = v
+			break
+		}
+	}
+	if mod == nil {
+		return Info{}, xerrors.Errorf("%s is not found", module)
+	}
+
+	modVer := mod.Versions[len(mod.Versions)-1]
+	return Info{Version: modVer.Version, Time: modVer.Time}, nil
+}
+
 func (m *ModuleProxy) GetGoMod(_ context.Context, module, version string) (string, error) {
 	modRoot, err := m.fetcher.Fetch(module)
 	if err != nil {
