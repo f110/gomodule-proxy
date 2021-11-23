@@ -161,7 +161,7 @@ func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
 		if v == mod {
 			continue
 		}
-		excludeDirs[filepath.Dir(v.modFilePath)] = struct{}{}
+		excludeDirs[filepath.Dir(v.modFilePath)+"/"] = struct{}{}
 	}
 
 	if isTag {
@@ -171,12 +171,16 @@ func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
 		buf := new(bytes.Buffer)
 		w := zip.NewWriter(buf)
 		relPath := filepath.Join(m.dir, strings.TrimPrefix(mod.Path, m.repoRoot.Root))
+		gitDir := filepath.Join(m.dir, ".git") + "/"
 		modDir := mod.Path + "@" + version
 		err := filepath.Walk(relPath, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return xerrors.Errorf(": %w", err)
 			}
 			if info.IsDir() {
+				return nil
+			}
+			if strings.HasPrefix(path, gitDir) {
 				return nil
 			}
 			for k := range excludeDirs {
