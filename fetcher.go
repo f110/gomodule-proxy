@@ -174,6 +174,7 @@ func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
 		relPath := filepath.Join(m.dir, strings.TrimPrefix(mod.Path, m.repoRoot.Root))
 		gitDir := filepath.Join(m.dir, ".git") + "/"
 		modDir := mod.Path + "@" + version
+		foundLicenseFile := false
 		err := filepath.Walk(relPath, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
 				return xerrors.Errorf(": %w", err)
@@ -193,6 +194,9 @@ func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
 			p := strings.TrimPrefix(path, relPath)
 			p = p[1:]
 			p = filepath.Join(modDir, p)
+			if p == filepath.Join(modDir, "LICENSE") {
+				foundLicenseFile = true
+			}
 			f, err := w.Create(p)
 			if err != nil {
 				return xerrors.Errorf(": %w", err)
@@ -212,29 +216,31 @@ func (m *ModuleRoot) Archive(module, version string) (io.Reader, error) {
 		}
 
 		// Find and pack LICENSE file
-		d := relPath
-		for {
-			if _, err := os.Stat(filepath.Join(d, "LICENSE")); os.IsNotExist(err) {
-				if d == m.dir {
-					break
+		if !foundLicenseFile {
+			d := relPath
+			for {
+				if _, err := os.Stat(filepath.Join(d, "LICENSE")); os.IsNotExist(err) {
+					if d == m.dir {
+						break
+					}
+					d = filepath.Dir(d)
+					continue
 				}
-				d = filepath.Dir(d)
-				continue
-			}
 
-			f, err := w.Create(filepath.Join(modDir, "LICENSE"))
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
+				f, err := w.Create(filepath.Join(modDir, "LICENSE"))
+				if err != nil {
+					return nil, xerrors.Errorf(": %w", err)
+				}
+				fBuf, err := os.ReadFile(filepath.Join(d, "LICENSE"))
+				if err != nil {
+					return nil, xerrors.Errorf(": %w", err)
+				}
+				_, err = f.Write(fBuf)
+				if err != nil {
+					return nil, xerrors.Errorf(": %w", err)
+				}
+				break
 			}
-			fBuf, err := os.ReadFile(filepath.Join(d, "LICENSE"))
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
-			}
-			_, err = f.Write(fBuf)
-			if err != nil {
-				return nil, xerrors.Errorf(": %w", err)
-			}
-			break
 		}
 
 		w.Close()
