@@ -20,6 +20,7 @@ go_library(
     deps = [
         "//vendor/github.com/go-git/go-git/v5:go-git",
         "//vendor/github.com/go-git/go-git/v5/plumbing",
+        "//vendor/github.com/go-git/go-git/v5/plumbing/filemode",
         "//vendor/github.com/go-git/go-git/v5/plumbing/object",
         "//vendor/github.com/google/go-github/v40/github",
         "//vendor/github.com/gorilla/mux",

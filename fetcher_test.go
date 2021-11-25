@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,14 +21,29 @@ func TestModuleRoot(t *testing.T) {
 	require.NoError(t, err)
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
+
 	err = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/f110/gomodule-proxy-test"), 0644)
 	require.NoError(t, err)
 	_, err = wt.Add("go.mod")
 	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(dir, "const.go"), []byte("package proxy\n\nconst Foo = \"bar\""), 0644)
+	require.NoError(t, err)
+	_, err = wt.Add("const.go")
+	require.NoError(t, err)
+
 	err = os.MkdirAll(filepath.Join(dir, "pkg/api"), 0755)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, "pkg/api/go.mod"), []byte("module github.com/f110/gomodule-proxy-test/pkg/api"), 0644)
 	require.NoError(t, err)
+	_, err = wt.Add("pkg/api/go.mod")
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(dir, "pkg/api/const2.go"), []byte("package api\n\nconst Baz = \"foo\""), 0644)
+	require.NoError(t, err)
+	_, err = wt.Add("pkg/api/const2.go")
+	require.NoError(t, err)
+
 	commitHash, err := wt.Commit("init", &git.CommitOptions{
 		Author: &object.Signature{
 			Email: "test@example.com",
@@ -51,26 +68,62 @@ func TestModuleRoot(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	vcsRepo := NewVCS("git", "")
+	err = vcsRepo.Open(dir)
+	require.NoError(t, err)
 	repoRoot := &vcs.RepoRoot{
-		VCS:  vcs.ByCmd("git"),
 		Root: "github.com/f110/gomodule-proxy-test",
 	}
 	moduleRoot := &ModuleRoot{
 		dir:      dir,
 		repoRoot: repoRoot,
+		vcs:      vcsRepo,
 	}
 	modules, err := moduleRoot.findModules()
 	require.NoError(t, err)
 	moduleRoot.Modules = modules
 	err = moduleRoot.findVersions()
 	require.NoError(t, err)
+
 	for _, v := range modules {
-		t.Logf("%s: %v", v.Path, v.Versions)
+		var vers []string
+		for _, ver := range v.Versions {
+			vers = append(vers, ver.Semver)
+		}
+		t.Logf("%s: %v", v.Path, vers)
 		switch v.Path {
 		case "github.com/f110/gomodule-proxy-test":
-			assert.ElementsMatch(t, []string{"v1.0.0"}, v.Versions)
+			assert.ElementsMatch(t, []string{"v1.0.0"}, vers)
 		case "github.com/f110/gomodule-proxy-test/pkg/api":
-			assert.ElementsMatch(t, []string{"pkg/api/v1.5.0"}, v.Versions)
+			assert.ElementsMatch(t, []string{"v1.5.0"}, vers)
 		}
 	}
+
+	buf := new(bytes.Buffer)
+	err = moduleRoot.Archive(buf, "github.com/f110/gomodule-proxy-test/pkg/api", "v1.5.0")
+	require.NoError(t, err)
+	zipReader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), 4096)
+	require.NoError(t, err)
+	var files []string
+	for _, v := range zipReader.File {
+		files = append(files, v.Name)
+	}
+	buf.Reset()
+	assert.ElementsMatch(t, []string{
+		"github.com/f110/gomodule-proxy-test/pkg/api@v1.5.0/go.mod",
+		"github.com/f110/gomodule-proxy-test/pkg/api@v1.5.0/const2.go",
+	}, files)
+
+	err = moduleRoot.Archive(buf, "github.com/f110/gomodule-proxy-test", "v1.0.0")
+	require.NoError(t, err)
+	zipReader, err = zip.NewReader(bytes.NewReader(buf.Bytes()), 4096)
+	require.NoError(t, err)
+	files = []string{}
+	for _, v := range zipReader.File {
+		files = append(files, v.Name)
+	}
+	assert.ElementsMatch(t, []string{
+		"github.com/f110/gomodule-proxy-test@v1.0.0/go.mod",
+		"github.com/f110/gomodule-proxy-test@v1.0.0/const.go",
+	}, files)
 }

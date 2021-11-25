@@ -50,8 +50,8 @@ type Info struct {
 	Time    time.Time
 }
 
-func (m *ModuleProxy) Versions(_ context.Context, module string) ([]string, error) {
-	modRoot, err := m.fetcher.Fetch(module)
+func (m *ModuleProxy) Versions(ctx context.Context, module string) ([]string, error) {
+	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
 		return nil, xerrors.Errorf(": %w", err)
 	}
@@ -68,8 +68,8 @@ func (m *ModuleProxy) Versions(_ context.Context, module string) ([]string, erro
 	return nil, xerrors.Errorf("%s is not found", module)
 }
 
-func (m *ModuleProxy) GetInfo(_ context.Context, module, version string) (Info, error) {
-	modRoot, err := m.fetcher.Fetch(module)
+func (m *ModuleProxy) GetInfo(ctx context.Context, module, version string) (Info, error) {
+	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
 		return Info{}, xerrors.Errorf(": %w", err)
 	}
@@ -85,16 +85,16 @@ func (m *ModuleProxy) GetInfo(_ context.Context, module, version string) (Info, 
 		return Info{}, xerrors.Errorf("%s is not found", module)
 	}
 	for _, v := range mod.Versions {
-		if v.Version == version {
-			return Info{Version: v.Version, Time: v.Time}, nil
+		if version == v.Semver {
+			return Info{Version: v.Semver, Time: v.Time}, nil
 		}
 	}
 
 	return Info{}, xerrors.Errorf("%s is not found in %s", version, module)
 }
 
-func (m *ModuleProxy) GetLatestVersion(_ context.Context, module string) (Info, error) {
-	modRoot, err := m.fetcher.Fetch(module)
+func (m *ModuleProxy) GetLatestVersion(ctx context.Context, module string) (Info, error) {
+	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
 		return Info{}, xerrors.Errorf(": %w", err)
 	}
@@ -114,8 +114,8 @@ func (m *ModuleProxy) GetLatestVersion(_ context.Context, module string) (Info, 
 	return Info{Version: modVer.Version, Time: modVer.Time}, nil
 }
 
-func (m *ModuleProxy) GetGoMod(_ context.Context, module, version string) (string, error) {
-	modRoot, err := m.fetcher.Fetch(module)
+func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (string, error) {
+	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
 		return "", xerrors.Errorf(": %w", err)
 	}
@@ -139,18 +139,18 @@ func (m *ModuleProxy) GetGoMod(_ context.Context, module, version string) (strin
 	return string(goMod), nil
 }
 
-func (m *ModuleProxy) GetZip(_ context.Context, module, version string) (io.Reader, error) {
-	modRoot, err := m.fetcher.Fetch(module)
+func (m *ModuleProxy) GetZip(ctx context.Context, w io.Writer, module, version string) error {
+	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return nil, xerrors.Errorf(": %w", err)
+		return xerrors.Errorf(": %w", err)
 	}
 
-	r, err := modRoot.Archive(module, version)
+	err = modRoot.Archive(w, module, version)
 	if err != nil {
-		return nil, xerrors.Errorf(": %w", err)
+		return xerrors.Errorf(": %w", err)
 	}
 
-	return r, nil
+	return nil
 }
 
 type httpTransport struct{}
