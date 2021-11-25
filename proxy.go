@@ -59,7 +59,7 @@ func (m *ModuleProxy) Versions(ctx context.Context, module string) ([]string, er
 		if mod.Path == module {
 			var versions []string
 			for _, v := range mod.Versions {
-				versions = append(versions, v.Version)
+				versions = append(versions, v.Semver)
 			}
 			return versions, nil
 		}
