@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"go.f110.dev/xerrors"
 )
@@ -21,15 +21,17 @@ type ProxyServer struct {
 	r     *mux.Router
 	proxy *ModuleProxy
 
-	debug bool
+	logger logr.Logger
+	debug  bool
 }
 
-func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, debug bool) *ProxyServer {
+func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, logger logr.Logger, debug bool) *ProxyServer {
 	s := &ProxyServer{
-		r:     mux.NewRouter(),
-		rr:    httputil.NewSingleHostReverseProxy(upstream),
-		proxy: proxy,
-		debug: debug,
+		r:      mux.NewRouter(),
+		rr:     httputil.NewSingleHostReverseProxy(upstream),
+		proxy:  proxy,
+		logger: logger,
+		debug:  debug,
 	}
 	s.s = &http.Server{
 		Addr:    addr,
@@ -41,7 +43,7 @@ func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, debug bo
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@v/{version}.mod").HandlerFunc(s.handle(s.mod))
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@v/{version}.zip").HandlerFunc(s.handle(s.zip))
 	s.r.Methods(http.MethodGet).Path("/{module:.+}/@latest").HandlerFunc(s.handle(s.latest))
-	s.r.Use(middlewareAccessLog)
+	s.r.Use(middlewareAccessLog(logger.WithName("access_log")))
 	if debug {
 		s.r.Use(middlewareDebugInfo)
 	}
@@ -50,7 +52,7 @@ func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, debug bo
 }
 
 func (s *ProxyServer) Start() error {
-	log.Printf("Start listening %s", s.s.Addr)
+	s.logger.Info("Starting listening", "addr", s.s.Addr)
 	if err := s.s.ListenAndServe(); err != nil {
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
@@ -88,7 +90,7 @@ func (s *ProxyServer) handle(h func(w http.ResponseWriter, req *http.Request, mo
 func (s *ProxyServer) list(w http.ResponseWriter, req *http.Request, module, _ string) {
 	vers, err := s.proxy.Versions(req.Context(), module)
 	if err != nil {
-		log.Printf("Faild to get version list: %+v", err)
+		s.logger.Info("Failed to get versions", "err", err)
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
@@ -101,12 +103,12 @@ func (s *ProxyServer) list(w http.ResponseWriter, req *http.Request, module, _ s
 func (s *ProxyServer) info(w http.ResponseWriter, req *http.Request, module, version string) {
 	info, err := s.proxy.GetInfo(req.Context(), module, version)
 	if err != nil {
-		log.Printf("Failed to get module info: %+v", err)
+		s.logger.Info("Failed to get module info", "err", err)
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(info); err != nil {
-		log.Printf("Failed to encode to json: %v", err)
+		s.logger.Info("Failed to encode to json", "err", err)
 		return
 	}
 }
@@ -114,20 +116,20 @@ func (s *ProxyServer) info(w http.ResponseWriter, req *http.Request, module, ver
 func (s *ProxyServer) mod(w http.ResponseWriter, req *http.Request, module, version string) {
 	mod, err := s.proxy.GetGoMod(req.Context(), module, version)
 	if err != nil {
-		log.Printf("Failed to get go.mod: %+v", err)
+		s.logger.Info("Failed to get go.mod", "err", err)
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
 	_, err = io.WriteString(w, mod)
 	if err != nil {
-		log.Printf("Failed to write a buffer to ResponseWriter: %v", err)
+		s.logger.Info("Failed to write a buffer to ResponseWriter", "err", err)
 	}
 }
 
 func (s *ProxyServer) zip(w http.ResponseWriter, req *http.Request, module, version string) {
 	err := s.proxy.GetZip(req.Context(), w, module, version)
 	if err != nil {
-		log.Printf("Failed to create zip: %+v", err)
+		s.logger.Info("Failed to create zip", "err", err)
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
@@ -136,36 +138,44 @@ func (s *ProxyServer) zip(w http.ResponseWriter, req *http.Request, module, vers
 func (s *ProxyServer) latest(w http.ResponseWriter, req *http.Request, module, _ string) {
 	info, err := s.proxy.GetLatestVersion(req.Context(), module)
 	if err != nil {
-		log.Printf("Failed to get latest module version: %+v", err)
+		s.logger.Info("Failed to get latest module version", "err", err)
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(info); err != nil {
-		log.Printf("Failed to encode to json: %v", err)
+		s.logger.Info("Failed to encode to json", xerrors.ZapField(err))
 		return
 	}
 }
 
-func middlewareAccessLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		log.Printf(
-			"host:%s protocol:%s method:%s path:%s remote_addr:%s ua:%s",
-			req.Host,
-			req.Proto,
-			req.Method,
-			req.URL.Path,
-			req.RemoteAddr,
-			req.Header.Get("User-Agent"),
-		)
+func middlewareAccessLog(logger logr.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			logger.Info(
+				"",
+				"host",
+				req.Host,
+				"protocol",
+				req.Proto,
+				"method",
+				req.Method,
+				"path",
+				req.URL.Path,
+				"remote_addr",
+				req.RemoteAddr,
+				"ua",
+				req.Header.Get("User-Agent"),
+			)
 
-		next.ServeHTTP(w, req)
-	})
+			next.ServeHTTP(w, req)
+		})
+	}
 }
 
 func middlewareDebugInfo(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		vars := mux.Vars(req)
-		log.Printf("vars:%v", vars)
+		fmt.Printf("vars:%v\n", vars)
 
 		next.ServeHTTP(w, req)
 	})

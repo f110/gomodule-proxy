@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,9 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
 	"github.com/google/go-github/v40/github"
 	"github.com/spf13/pflag"
 	"go.f110.dev/xerrors"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
 	"go.f110.dev/gomodule-proxy/cmd/gomodule-proxy/internal/config"
@@ -28,6 +30,7 @@ type goModuleProxyCommand struct {
 	GitHubToken  string
 	GitHubAPIURL string
 
+	logger       logr.Logger
 	upstream     *url.URL
 	config       config.Config
 	githubClient *github.Client
@@ -55,9 +58,21 @@ func (c *goModuleProxyCommand) RequiredFlags() []string {
 }
 
 func (c *goModuleProxyCommand) Init() error {
+	var zLogger *zap.Logger
 	if c.IsDebug() {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		zapLog, err := zap.NewDevelopment()
+		if err != nil {
+			return xerrors.WithStack(err)
+		}
+		zLogger = zapLog
+	} else {
+		zapLog, err := zap.NewProduction()
+		if err != nil {
+			return xerrors.WithStack(err)
+		}
+		zLogger = zapLog
 	}
+	c.logger = zapr.NewLoggerWithOptions(zLogger, zapr.AllowZapFields(true))
 
 	conf, err := config.ReadConfig(c.ConfigPath)
 	if err != nil {
@@ -106,7 +121,10 @@ func (c *goModuleProxyCommand) Run() error {
 		modules = append(modules, re)
 	}
 	proxy := gomodule.NewModuleProxy(modules, c.ModuleDir, c.githubClient)
-	server := gomodule.NewProxyServer(c.Addr, c.upstream, proxy, c.IsDebug())
+	server := gomodule.NewProxyServer(c.Addr, c.upstream, proxy, c.logger, c.IsDebug())
+
+	err := xerrors.WithStack(xerrors.New("foo"))
+	c.logger.Info("Foobar", xerrors.ZapField(err))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -115,12 +133,12 @@ func (c *goModuleProxyCommand) Run() error {
 		select {
 		case <-ctx.Done():
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			log.Print("Shutting down the server")
+			c.logger.Info("Shutting down server")
 			if err := server.Stop(ctx); err != nil {
 				stopErrCh <- err
 			}
 			cancel()
-			log.Print("Server shutdown successfully")
+			c.logger.Info("Server shutdown successfully")
 			close(stopErrCh)
 		case <-stopErrCh:
 			return
@@ -128,6 +146,7 @@ func (c *goModuleProxyCommand) Run() error {
 	}()
 
 	go func() {
+		c.logger.Info("Starting server")
 		if err := server.Start(); err != nil {
 			startErrCh <- err
 		}
