@@ -6,7 +6,7 @@ go_library(
     importpath = "go.f110.dev/gomodule-proxy/cmd/gomodule-proxy/internal/config",
     visibility = ["//cmd/gomodule-proxy:__subpackages__"],
     deps = [
-        "@dev_f110_go_xerrors//:go_default_library",
-        "@in_gopkg_yaml_v2//:go_default_library",
+        "@dev_f110_go_xerrors//:xerrors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
