@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/oauth2"
 	"golang.org/x/xerrors"
+
+	"go.f110.dev/gomodule-proxy/cmd/gomodule-proxy/internal/config"
+	"go.f110.dev/gomodule-proxy/internal/gomodule"
 )
 
 type goModuleProxyCommand struct {
@@ -25,7 +29,7 @@ type goModuleProxyCommand struct {
 	GitHubAPIURL string
 
 	upstream     *url.URL
-	config       Config
+	config       config.Config
 	githubClient *github.Client
 }
 
@@ -55,7 +59,7 @@ func (c *goModuleProxyCommand) Init() error {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
 
-	conf, err := ReadConfig(c.ConfigPath)
+	conf, err := config.ReadConfig(c.ConfigPath)
 	if err != nil {
 		return xerrors.Errorf(": %w", err)
 	}
@@ -93,8 +97,16 @@ func (c *goModuleProxyCommand) Run() error {
 	stopErrCh := make(chan error, 1)
 	startErrCh := make(chan error, 1)
 
-	proxy := NewModuleProxy(c.config, c.ModuleDir, c.githubClient)
-	server := NewProxyServer(c.Addr, c.upstream, proxy, c.IsDebug())
+	var modules []*regexp.Regexp
+	for _, v := range c.config {
+		re, err := regexp.Compile(v.ModuleName)
+		if err != nil {
+			return xerrors.Errorf(": %w", err)
+		}
+		modules = append(modules, re)
+	}
+	proxy := gomodule.NewModuleProxy(modules, c.ModuleDir, c.githubClient)
+	server := gomodule.NewProxyServer(c.Addr, c.upstream, proxy, c.IsDebug())
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	go func() {

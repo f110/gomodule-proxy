@@ -1,4 +1,4 @@
-package main
+package gomodule
 
 import (
 	"archive/zip"

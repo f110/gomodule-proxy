@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "config",
+    srcs = ["config.go"],
+    importpath = "go.f110.dev/gomodule-proxy/cmd/gomodule-proxy/internal/config",
+    visibility = ["//cmd/gomodule-proxy:__subpackages__"],
+    deps = [
+        "@in_gopkg_yaml_v2//:go_default_library",
+        "@org_golang_x_xerrors//:go_default_library",
+    ],
+)
