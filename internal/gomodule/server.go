@@ -3,6 +3,7 @@ package gomodule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +12,7 @@ import (
 	"net/url"
 
 	"github.com/gorilla/mux"
-	"golang.org/x/xerrors"
+	"go.f110.dev/xerrors"
 )
 
 type ProxyServer struct {
@@ -51,18 +52,21 @@ func NewProxyServer(addr string, upstream *url.URL, proxy *ModuleProxy, debug bo
 func (s *ProxyServer) Start() error {
 	log.Printf("Start listening %s", s.s.Addr)
 	if err := s.s.ListenAndServe(); err != nil {
-		if err == http.ErrServerClosed {
+		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 
-		return xerrors.Errorf(": %w", err)
+		return xerrors.WithStack(err)
 	}
 
 	return nil
 }
 
 func (s *ProxyServer) Stop(ctx context.Context) error {
-	return s.s.Shutdown(ctx)
+	if err := s.s.Shutdown(ctx); err != nil {
+		return xerrors.WithStack(err)
+	}
+	return nil
 }
 
 func (s *ProxyServer) handle(h func(w http.ResponseWriter, req *http.Request, module, version string)) http.HandlerFunc {

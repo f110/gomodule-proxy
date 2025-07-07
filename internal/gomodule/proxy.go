@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v40/github"
-	"golang.org/x/xerrors"
+	"go.f110.dev/xerrors"
 )
 
 const (
@@ -54,7 +54,7 @@ type Info struct {
 func (m *ModuleProxy) Versions(ctx context.Context, module string) ([]string, error) {
 	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return nil, xerrors.Errorf(": %w", err)
+		return nil, err
 	}
 	for _, mod := range modRoot.Modules {
 		if mod.Path == module {
@@ -66,13 +66,13 @@ func (m *ModuleProxy) Versions(ctx context.Context, module string) ([]string, er
 		}
 	}
 
-	return nil, xerrors.Errorf("%s is not found", module)
+	return nil, xerrors.Newf("%s is not found", module)
 }
 
 func (m *ModuleProxy) GetInfo(ctx context.Context, module, version string) (Info, error) {
 	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return Info{}, xerrors.Errorf(": %w", err)
+		return Info{}, err
 	}
 
 	var mod *Module
@@ -83,7 +83,7 @@ func (m *ModuleProxy) GetInfo(ctx context.Context, module, version string) (Info
 		}
 	}
 	if mod == nil {
-		return Info{}, xerrors.Errorf("%s is not found", module)
+		return Info{}, xerrors.Newf("%s is not found", module)
 	}
 	for _, v := range mod.Versions {
 		if version == v.Semver {
@@ -91,13 +91,13 @@ func (m *ModuleProxy) GetInfo(ctx context.Context, module, version string) (Info
 		}
 	}
 
-	return Info{}, xerrors.Errorf("%s is not found in %s", version, module)
+	return Info{}, xerrors.Newf("%s is not found in %s", version, module)
 }
 
 func (m *ModuleProxy) GetLatestVersion(ctx context.Context, module string) (Info, error) {
 	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return Info{}, xerrors.Errorf(": %w", err)
+		return Info{}, err
 	}
 
 	var mod *Module
@@ -108,7 +108,7 @@ func (m *ModuleProxy) GetLatestVersion(ctx context.Context, module string) (Info
 		}
 	}
 	if mod == nil {
-		return Info{}, xerrors.Errorf("%s is not found", module)
+		return Info{}, xerrors.Newf("%s is not found", module)
 	}
 
 	modVer := mod.Versions[len(mod.Versions)-1]
@@ -118,7 +118,7 @@ func (m *ModuleProxy) GetLatestVersion(ctx context.Context, module string) (Info
 func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (string, error) {
 	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return "", xerrors.Errorf(": %w", err)
+		return "", err
 	}
 
 	var mod *Module
@@ -129,12 +129,12 @@ func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (str
 		}
 	}
 	if mod == nil {
-		return "", xerrors.Errorf("%s is not found", module)
+		return "", xerrors.Newf("%s is not found", module)
 	}
 
 	goMod, err := mod.ModuleFile(version)
 	if err != nil {
-		return "", xerrors.Errorf(": %w", err)
+		return "", xerrors.Newf(": %w", err)
 	}
 
 	return string(goMod), nil
@@ -143,12 +143,12 @@ func (m *ModuleProxy) GetGoMod(ctx context.Context, module, version string) (str
 func (m *ModuleProxy) GetZip(ctx context.Context, w io.Writer, module, version string) error {
 	modRoot, err := m.fetcher.Fetch(ctx, module)
 	if err != nil {
-		return xerrors.Errorf(": %w", err)
+		return err
 	}
 
 	err = modRoot.Archive(w, module, version)
 	if err != nil {
-		return xerrors.Errorf(": %w", err)
+		return err
 	}
 
 	return nil
