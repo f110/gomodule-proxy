@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/go-github/v40/github"
 	"github.com/spf13/pflag"
+	"go.f110.dev/xerrors"
 	"golang.org/x/oauth2"
-	"golang.org/x/xerrors"
 
 	"go.f110.dev/gomodule-proxy/cmd/gomodule-proxy/internal/config"
 	"go.f110.dev/gomodule-proxy/internal/gomodule"
@@ -61,19 +61,19 @@ func (c *goModuleProxyCommand) Init() error {
 
 	conf, err := config.ReadConfig(c.ConfigPath)
 	if err != nil {
-		return xerrors.Errorf(": %w", err)
+		return err
 	}
 	c.config = conf
 
 	uu, err := url.Parse(c.UpstreamURL)
 	if err != nil {
-		return xerrors.Errorf(": %w", err)
+		return xerrors.WithStack(err)
 	}
 	c.upstream = uu
 
 	gu, err := url.Parse(c.GitHubAPIURL)
 	if err != nil {
-		return xerrors.Errorf(": %w", err)
+		return xerrors.WithStack(err)
 	}
 
 	var tc *http.Client
@@ -101,7 +101,7 @@ func (c *goModuleProxyCommand) Run() error {
 	for _, v := range c.config {
 		re, err := regexp.Compile(v.ModuleName)
 		if err != nil {
-			return xerrors.Errorf(": %w", err)
+			return xerrors.WithStack(err)
 		}
 		modules = append(modules, re)
 	}
@@ -117,7 +117,7 @@ func (c *goModuleProxyCommand) Run() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			log.Print("Shutting down the server")
 			if err := server.Stop(ctx); err != nil {
-				stopErrCh <- xerrors.Errorf(": %w", err)
+				stopErrCh <- err
 			}
 			cancel()
 			log.Print("Server shutdown successfully")
@@ -129,7 +129,7 @@ func (c *goModuleProxyCommand) Run() error {
 
 	go func() {
 		if err := server.Start(); err != nil {
-			startErrCh <- xerrors.Errorf(": %w", err)
+			startErrCh <- err
 		}
 	}()
 
@@ -137,11 +137,11 @@ func (c *goModuleProxyCommand) Run() error {
 	select {
 	case err, ok := <-startErrCh:
 		if ok {
-			return xerrors.Errorf(": %w", err)
+			return err
 		}
 	case err, ok := <-stopErrCh:
 		if ok {
-			return xerrors.Errorf(": %w", err)
+			return err
 		}
 	}
 

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
 
-func goModuleProxy(args []string) error {
+func goModuleProxy() error {
 	proxy := newGoModuleProxyCommand()
 
 	cmd := &cobra.Command{
@@ -26,12 +29,13 @@ func goModuleProxy(args []string) error {
 		}
 	}
 
-	cmd.SetArgs(args)
-	return cmd.Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return cmd.ExecuteContext(ctx)
 }
 
 func main() {
-	if err := goModuleProxy(os.Args); err != nil {
+	if err := goModuleProxy(); err != nil {
 		format := "%v\n"
 		if os.Getenv("DEBUG") != "" {
 			format = "%+v\n"
