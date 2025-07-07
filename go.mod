@@ -4,12 +4,15 @@ go 1.24.4
 
 require (
 	github.com/go-git/go-git/v5 v5.16.2
+	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/zapr v1.3.0
 	github.com/google/go-github/v40 v40.0.0
 	github.com/gorilla/mux v1.8.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
-	go.f110.dev/xerrors v0.0.0-20241005060613-5d51f0ed30e0
+	go.f110.dev/xerrors v0.0.0-20250707144214-45e6a09c948d
+	go.uber.org/zap v1.27.0
 	golang.org/x/mod v0.25.0
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
@@ -38,7 +41,6 @@ require (
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
