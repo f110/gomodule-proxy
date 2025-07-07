@@ -14,8 +14,8 @@ go_library(
         "@com_github_google_go_github_v40//github:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_pflag//:go_default_library",
+        "@dev_f110_go_xerrors//:go_default_library",
         "@org_golang_x_oauth2//:go_default_library",
-        "@org_golang_x_xerrors//:go_default_library",
     ],
 )
 
