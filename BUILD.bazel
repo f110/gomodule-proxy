@@ -1,55 +1,5 @@
 load("@gazelle//:def.bzl", "gazelle")
-load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 gazelle(name = "gazelle")
 
 # gazelle:prefix go.f110.dev/gomodule-proxy
-
-go_library(
-    name = "gomodule-proxy_lib",
-    srcs = [
-        "command.go",
-        "config.go",
-        "fetcher.go",
-        "main.go",
-        "proxy.go",
-        "server.go",
-    ],
-    importpath = "go.f110.dev/gomodule-proxy",
-    visibility = ["//visibility:private"],
-    deps = [
-        "@com_github_go_git_go_git_v5//:go_default_library",
-        "@com_github_go_git_go_git_v5//plumbing:go_default_library",
-        "@com_github_go_git_go_git_v5//plumbing/filemode:go_default_library",
-        "@com_github_go_git_go_git_v5//plumbing/object:go_default_library",
-        "@com_github_google_go_github_v40//github:go_default_library",
-        "@com_github_gorilla_mux//:go_default_library",
-        "@com_github_spf13_cobra//:go_default_library",
-        "@com_github_spf13_pflag//:go_default_library",
-        "@in_gopkg_yaml_v2//:go_default_library",
-        "@org_golang_x_mod//modfile",
-        "@org_golang_x_mod//semver",
-        "@org_golang_x_oauth2//:go_default_library",
-        "@org_golang_x_tools_go_vcs//:vcs",
-        "@org_golang_x_xerrors//:go_default_library",
-    ],
-)
-
-go_binary(
-    name = "gomodule-proxy",
-    embed = [":gomodule-proxy_lib"],
-    visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "gomodule-proxy_test",
-    srcs = ["fetcher_test.go"],
-    embed = [":gomodule-proxy_lib"],
-    deps = [
-        "@com_github_go_git_go_git_v5//:go_default_library",
-        "@com_github_go_git_go_git_v5//plumbing/object:go_default_library",
-        "@com_github_stretchr_testify//assert:go_default_library",
-        "@com_github_stretchr_testify//require:go_default_library",
-        "@org_golang_x_tools_go_vcs//:vcs",
-    ],
-)

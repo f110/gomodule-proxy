@@ -1,9 +1,10 @@
-package main
+package gomodule
 
 import (
 	"context"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/google/go-github/v40/github"
@@ -15,16 +16,16 @@ const (
 )
 
 type ModuleProxy struct {
-	conf Config
+	modules []*regexp.Regexp
 
 	fetcher      *ModuleFetcher
 	httpClient   *http.Client
 	githubClient *github.Client
 }
 
-func NewModuleProxy(conf Config, moduleDir string, githubClient *github.Client) *ModuleProxy {
+func NewModuleProxy(modules []*regexp.Regexp, moduleDir string, githubClient *github.Client) *ModuleProxy {
 	return &ModuleProxy{
-		conf:         conf,
+		modules:      modules,
 		fetcher:      NewModuleFetcher(moduleDir),
 		githubClient: githubClient,
 		httpClient:   &http.Client{},
@@ -32,8 +33,8 @@ func NewModuleProxy(conf Config, moduleDir string, githubClient *github.Client) 
 }
 
 func (m *ModuleProxy) IsProxy(module string) bool {
-	for _, v := range m.conf {
-		if v.match.MatchString(module) {
+	for _, v := range m.modules {
+		if v.MatchString(module) {
 			return true
 		}
 	}
